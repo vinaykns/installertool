@@ -16,7 +16,7 @@ args = parser.parse_args()
 
 # executeCommand executes the cmd in a seperate shell and return its status code.
 def executeCommand(args):
-    cmdObject = subprocess.run(args=args, shell=True)
+    cmdObject = subprocess.run(args=args)
     return cmdObject.returncode
 
 

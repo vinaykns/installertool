@@ -16,13 +16,15 @@ args = parser.parse_args()
 
 # executeCommand executes the cmd in a seperate shell and return its status code.
 def executeCommand(args):
-    cmdObject = subprocess.run(args=args, shell=True)
+    cmdObject = subprocess.run(args=args)
     return cmdObject.returncode
 
 
 # createCluster creates the oc cluster.
 def createCluster():
+    #print(args.path, args.dir, args.level)
     createCmd = '{} create cluster --dir {} --log-level {}'.format(args.path, args.dir, args.level)
+    print(createCmd)
     returncode = executeCommand(createCmd.split())
     if returncode != 0:
         logging.error("failed to bring up the cluster")
