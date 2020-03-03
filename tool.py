@@ -5,8 +5,9 @@ import shlex, subprocess
 import re
 import logging
 import os, sys
-from shutil import copyfile
+from shutil import copyfile, rmtree
 import yaml
+import requests
 
 # set the logging level
 logging.basicConfig(level=logging.DEBUG)
@@ -15,7 +16,7 @@ logging.basicConfig(level=logging.DEBUG)
 parser = argparse.ArgumentParser()
 parser.add_argument("-token", "--token", help="Cli Soft Token")
 parser.add_argument("-install-config", "--config", help="Provide install-config.yaml path")
-parser.add_argument("-version", "--version", help="Cluster version")
+parser.add_argument("-clustertype", "--type", help="Cluster version")
 args = parser.parse_args()
 
 
@@ -57,66 +58,42 @@ def checkocbinary():
                     return False
 
 
-def getReqFiles():
-    # get the openshift-install binary for the corresponding version.
-    # login into the api.ci.openshift.org using the token
-    command = 'oc login https://api.ci.openshift.org --token={}'.format(args.token)
+def setenvvariables():
+    # sets the env variables to run the shell script.
 
-    if commandReturnStatus(command):
-        logging.info("successful login into api.ci.openshift.org")
-    
-    # Get the username
-    userCmd = 'oc whoami'
-    usercmdObject = executeCommand(userCmd.split())
-    if usercmdObject.returncode != 0:
-        logging.error("unable to get the user name")
-        sys.exit()
+    if args.token:
+        os.environ["tokenvalue"] = args.token
 
-    user = usercmdObject.stdout.decode("utf-8")
-    
-    # Get the password for the user associated with
-    passCmd = 'oc whoami -t'
-    passcmdObject = executeCommand(passCmd.split())
-    if passcmdObject.returncode != 0:
-        logging.error("unable to get the password")
-        sys.exit()
-    
-    password = passcmdObject.stdout.decode("utf-8")
+    if args.config:
+        os.environ["configpath"] = args.config
 
-    # login to the registry svc.ci.openshift.org
-    dockerLoginCmd = 'docker login -u {} -p {} registry.svc.ci.openshift.org'.format(user, password)
-    dockerLoginCmdObject = executeCommand(dockerLoginCmd.split())
-    if dockerLoginCmdObject.returncode != 0:
-        logging.error("docker login failed to execute")
-        sys.exit()
-    
-    # get the pull-secret file into the curent directory
-    pullsecretFileCmd = 'oc registry login --to=pull-secret'
-    pullsecretFileCmdObject = executeCommand(pullsecretFileCmd.split())
-    if pullsecretFileCmdObject.returncode != 0:
-        logging.error("failed to obtain the pull-secret file")
-        sys.exit()
-    
-    # get the openshift-install binary in the current working directory.
-    ocInstallCmd = 'oc adm release extract --command=openshift-install \
-        registry.svc.ci.openshift.org/ocp/release:{}'.format(args.version)
-    ocInstallCmdObject = executeCommand(ocInstallCmd.split())
-    if ocInstallCmdObject.returncode != 0:
-        logging.error("failed to download the openshift-install binary")
+    if args.type:
+        version = ""
+        majorVer = args.type[:3]
+        if "ci" in args.type:
+            minorVer = ".0-0.ci"
+        else:
+            minorVer = ".0-0.nightly"
+        
+
+        version = majorVer + minorVer
+        cmd = 'https://openshift-release.svc.ci.openshift.org/api/v1/releasestream/{}/latest'.format(version)
+        cmdRequest = requests.get(cmd)
+        cmdDict = json.loads(cmdRequest.text)
+        os.environ["clusterversion"] = cmdDict['name']
+
+    scriptPath = os.curdir + '/script.sh'
+    if commandReturnStatus(scriptPath) !=  True:
         sys.exit(1)
-    
-    # copy the install-config.yaml into the current directory
-    dst = os.getcwd() + "/" + "install-config.yaml"
-    copyfile(args.config, dst)
-
-
-
 
 def updateSvcregistryauth():
     # update the auth of container registry "registry.svc.ci.openshift.org"
     # from the install-config.yaml file
-    # have a pre requisite knowledge that pull-secret file will be present in the
-    # current working directory.
+    
+    # change directory to where the required files are present.
+    os.chdir("installer")
+
+
     f = open("pull-secret")
     data = json.load(f)
     svcAuth = data['auths']['registry.svc.ci.openshift.org']['auth']
@@ -147,14 +124,16 @@ if __name__ == "__main__":
     currDir = os.getcwd()
     directory = "installer"
     path = os.path.join(currDir, directory)
+
+    # check if installer is present, if present delete the dir, else create it.
+    if os.path.isdir("installer"):
+        rmtree("installer", ignore_errors=True)
+   
     os.mkdir(path)
     logging.info('Directory {} created in {}'.format(directory, currDir))
 
-    # change to the path directory 
-    os.chdir(path)
-
     # Download the openshift-install binary corresponding to the version specified.
-    getReqFiles()
+    setenvvariables()
 
     # update the auth for the svc registry.
     updateSvcregistryauth()

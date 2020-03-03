@@ -2,10 +2,12 @@
 
 ### Updates install-config
 tool.py ensures the provided install-config.yaml has upto date container registry (registry.svc.ci.openshift.org) auth value.
-tool.py takes api.ci soft token, a current install-config.yaml file path and the cluster version to be installed.
+tool.py takes api.ci soft token, a current install-config.yaml file path and the cluster type to be installed, ex 4.4-ci
+or 4.4-nightly
+
 Sample command structure.
 ```
-python3 tool.py -token $token -install-config $path -version $version
+python3 tool.py -token $token -install-config $configpath -clustertype $clustertype
 ```
 
 ### Create cluster
